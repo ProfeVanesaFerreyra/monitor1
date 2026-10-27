@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Multiparamétrico Virtual - Prof. Vanesa Ferreyra®</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ecg: '#00FF66',
+                        spo2: '#00E5FF',
+                        nibp: '#FF3366',
+                        resp: '#FFE600',
+                        bgDark: '#0a0d12',
+                        panelDark: '#121824',
+                        cardDark: '#1a2234'
+                    },
+                    fontFamily: {
+                        mono: ['"Share Tech Mono"', 'monospace'],
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom styles for realistic monitor appearance */
+        body {
+            background-color: #05070a;
+            color: #e2e8f0;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .monitor-grid {
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .digital-value {
+            font-family: 'Share Tech Mono', monospace;
+            text-shadow: 0 0 12px currentColor;
+        }
+        @keyframes pulse-red {
+            0%, 100% { background-color: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
+            50% { background-color: rgba(239, 68, 68, 0.6); border-color: #fca5a5; }
+        }
+        @keyframes pulse-yellow {
+            0%, 100% { background-color: rgba(234, 179, 8, 0.2); border-color: #eab308; }
+            50% { background-color: rgba(234, 179, 8, 0.5); border-color: #fde047; }
+        }
+        .alarm-high {
+            animation: pulse-red 0.8s infinite;
+        }
+        .alarm-med {
+            animation: pulse-yellow 1.2s infinite;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased overflow-x-hidden">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-panelDark border-b border-gray-800 px-4 py-2 flex flex-wrap justify-between items-center z-20 shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-2 rounded-lg flex items-center justify-center">
+                <i class="fa-solid fa-heart-pulse text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-white flex items-center gap-2">
+                    SIMULADOR MULTIPARAMÉTRICO VIRTUAL
+                    <span class="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded-full font-normal">v2.0</span>
+                </h1>
+                <p class="text-xs text-gray-400">Autoría: <span class="text-gray-200 font-medium">Prof. Vanesa Ferreyra®</span> | Enfermería en Cuidados Críticos</p>
+            </div>
+        </div>
+
+        <!-- System Controls & Indicators -->
+        <div class="flex items-center gap-3 mt-2 sm:mt-0">
+            <!-- Simulated Clock -->
+            <div class="bg-black/40 border border-gray-800 rounded px-3 py-1 text-center font-mono text-sm">
+                <span class="text-gray-500 text-xs block leading-none">TIEMPO</span>
+                <span id="simTime" class="text-emerald-400 font-bold">00:00:00</span>
+            </div>
+
+            <!-- Mute Audio Button -->
+            <button id="btnMute" onclick="toggleMute()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium transition flex items-center gap-2 border border-gray-700">
+                <i id="muteIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                <span id="muteText" class="hidden sm:inline">Audio Activo</span>
+            </button>
+
+            <!-- Pause Waveforms Button -->
+            <button id="btnPause" onclick="togglePause()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium transition flex items-center gap-2 border border-gray-700">
+                <i id="pauseIcon" class="fa-solid fa-pause text-amber-400"></i>
+                <span id="pauseText" class="hidden sm:inline">Pausar</span>
+            </button>
+
+            <!-- Reset Button -->
+            <button onclick="resetToBaseline()" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium transition flex items-center gap-2 border border-gray-700" title="Restablecer">
+                <i class="fa-solid fa-rotate-left text-cyan-400"></i>
+                <span class="hidden sm:inline">Restablecer</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Layout Container -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 max-w-[1920px] mx-auto w-full">
+        
+        <!-- LEFT/CENTER PANEL: Real-time Monitor Screen (8 Cols on LG) -->
+        <section class="lg:col-span-8 flex flex-col gap-2 bg-bgDark rounded-xl border border-gray-800 p-2 shadow-2xl monitor-grid relative overflow-hidden">
+            
+            <!-- Global Alarm Banner (Hidden by default) -->
+            <div id="alarmBanner" class="hidden w-full py-1.5 px-4 rounded-md text-center font-bold text-sm tracking-wider uppercase flex items-center justify-between shadow-lg transition-all z-10">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> <span id="alarmBannerText">ALERTA</span></span>
+                <span id="alarmBannerSub" class="text-xs normal-case opacity-90 font-mono">Verifique al paciente</span>
+            </div>
+
+            <!-- WAVEFORM CHANNEL 1: ECG (GREEN) -->
+            <div class="flex-1 bg-cardDark/80 rounded-lg border border-emerald-950/60 p-2 flex flex-col justify-between relative overflow-hidden min-h-[110px]">
+                <div class="flex justify-between items-start z-10">
+                    <div class="flex items-center gap-2">
+                        <span class="text-ecg font-bold text-xs tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-heartbeat"></i> ECG II
+                        </span>
+                        <span class="text-[10px] text-emerald-600 font-mono">GAIN x1.0</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-emerald-500 text-xs font-semibold block">FC (lpm)</span>
+                        <span id="displayFC" class="digital-value text-ecg text-4xl sm:text-5xl font-black">75</span>
+                    </div>
+                </div>
+                <div class="absolute inset-0 top-6 right-24 bottom-1 left-2">
+                    <canvas id="canvasECG" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+
+            <!-- WAVEFORM CHANNEL 2: SpO2 Plethysmography (CYAN) -->
+            <div class="flex-1 bg-cardDark/80 rounded-lg border border-cyan-950/60 p-2 flex flex-col justify-between relative overflow-hidden min-h-[110px]">
+                <div class="flex justify-between items-start z-10">
+                    <div class="flex items-center gap-2">
+                        <span class="text-spo2 font-bold text-xs tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-wave-square"></i> SpO2
+                        </span>
+                        <span class="text-[10px] text-cyan-600 font-mono">PLETH</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-cyan-500 text-xs font-semibold block">SpO2 (%)</span>
+                        <span id="displaySpO2" class="digital-value text-spo2 text-4xl sm:text-5xl font-black">98</span>
+                    </div>
+                </div>
+                <div class="absolute inset-0 top-6 right-24 bottom-1 left-2">
+                    <canvas id="canvasSpO2" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+
+            <!-- WAVEFORM CHANNEL 3: Invasive/Pulse BP Curve (RED) & NIBP Values -->
+            <div class="flex-1 bg-cardDark/80 rounded-lg border border-rose-950/60 p-2 flex flex-col justify-between relative overflow-hidden min-h-[110px]">
+                <div class="flex justify-between items-start z-10">
+                    <div class="flex items-center gap-2">
+                        <span class="text-nibp font-bold text-xs tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-syringe"></i> PA (mmHg)
+                        </span>
+                        <span class="text-[10px] text-rose-600 font-mono">ART / PNI</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-rose-500 text-xs font-semibold block">SIS / DIA (PAM)</span>
+                        <div class="flex items-baseline justify-end gap-1">
+                            <span id="displayPA" class="digital-value text-nibp text-3xl sm:text-4xl font-black">120/80</span>
+                            <span class="text-xs text-rose-400 font-mono">(<span id="displayPAM">93</span>)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="absolute inset-0 top-6 right-36 bottom-1 left-2">
+                    <canvas id="canvasPA" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+
+            <!-- WAVEFORM CHANNEL 4: Respiratory Curve (YELLOW) -->
+            <div class="flex-1 bg-cardDark/80 rounded-lg border border-yellow-950/60 p-2 flex flex-col justify-between relative overflow-hidden min-h-[110px]">
+                <div class="flex justify-between items-start z-10">
+                    <div class="flex items-center gap-2">
+                        <span class="text-resp font-bold text-xs tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-lungs"></i> RESP
+                        </span>
+                        <span class="text-[10px] text-yellow-600 font-mono">IMPEDANCIA</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-yellow-500 text-xs font-semibold block">FR (rpm)</span>
+                        <span id="displayFR" class="digital-value text-resp text-4xl sm:text-5xl font-black">16</span>
+                    </div>
+                </div>
+                <div class="absolute inset-0 top-6 right-24 bottom-1 left-2">
+                    <canvas id="canvasRESP" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+
+            <!-- Footer Medical Disclaimer -->
+            <footer class="mt-1 text-[11px] text-gray-500 text-center border-t border-gray-800/80 pt-1.5 px-2 italic">
+                <i class="fa-solid fa-shield-halved text-gray-600 mr-1"></i>
+                <strong>Aviso Legal & Pedagógico:</strong> Este recurso es una herramienta de simulación exclusivamente educativa creada por la Prof. Vanesa Ferreyra®. Los algoritmos y trazados son representaciones docentes y NO deben utilizarse para diagnóstico o toma de decisiones clínicas en pacientes reales.
+            </footer>
+        </section>
+
+        <!-- RIGHT PANEL: Pedagogical Controls & Interactive Tabs (4 Cols on LG) -->
+        <section class="lg:col-span-4 flex flex-col gap-3">
+            
+            <!-- Navigation Tabs -->
+            <div class="flex bg-panelDark p-1 rounded-xl border border-gray-800 text-xs font-medium">
+                <button onclick="switchTab('tabControls')" id="btnTabControls" class="flex-1 py-2 rounded-lg transition text-center font-bold bg-gray-800 text-white shadow">
+                    <i class="fa-solid fa-sliders mr-1 text-emerald-400"></i> Controles
+                </button>
+                <button onclick="switchTab('tabScenarios')" id="btnTabScenarios" class="flex-1 py-2 rounded-lg transition text-center text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-notes-medical mr-1 text-cyan-400"></i> Escenarios
+                </button>
+                <button onclick="switchTab('tabExercise')" id="btnTabExercise" class="flex-1 py-2 rounded-lg transition text-center text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-user-nurse mr-1 text-yellow-400"></i> Análisis
+                </button>
+                <button onclick="switchTab('tabLog')" id="btnTabLog" class="flex-1 py-2 rounded-lg transition text-center text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-list-check mr-1 text-rose-400"></i> Eventos
+                </button>
+            </div>
+
+            <!-- TAB 1: MANUAL CONTROLS & ALARM SETTINGS -->
+            <div id="tabControls" class="bg-panelDark rounded-xl border border-gray-800 p-4 space-y-4 flex-1 overflow-y-auto max-h-[700px]">
+                <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider border-b border-gray-800 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-sliders text-emerald-400 mr-1.5"></i> Modificar Signos Vitales</span>
+                    <span class="text-[10px] text-gray-400 normal-case">Ajuste Dinámico</span>
+                </h2>
+
+                <!-- Control FC -->
+                <div class="space-y-1 bg-cardDark/50 p-2.5 rounded-lg border border-gray-800">
+                    <div class="flex justify-between text-xs font-medium">
+                        <span class="text-ecg font-bold">Frecuencia Cardíaca (FC)</span>
+                        <span class="font-mono text-emerald-300"><span id="valFC">75</span> lpm</span>
+                    </div>
+                    <input type="range" id="inputFC" min="30" max="200" value="75" oninput="updateControls()" class="w-full accent-emerald-500 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>Límite Mín: <input type="number" id="limitFcMin" value="50" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                        <span>Límite Máx: <input type="number" id="limitFcMax" value="120" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                    </div>
+                </div>
+
+                <!-- Control SpO2 -->
+                <div class="space-y-1 bg-cardDark/50 p-2.5 rounded-lg border border-gray-800">
+                    <div class="flex justify-between text-xs font-medium">
+                        <span class="text-spo2 font-bold">Saturación de O₂ (SpO₂)</span>
+                        <span class="font-mono text-cyan-300"><span id="valSpO2">98</span> %</span>
+                    </div>
+                    <input type="range" id="inputSpO2" min="50" max="100" value="98" oninput="updateControls()" class="w-full accent-cyan-500 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>Límite Mín: <input type="number" id="limitSpo2Min" value="90" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300">%</span>
+                        <span>Normal: 95-100%</span>
+                    </div>
+                </div>
+
+                <!-- Control PA Sistólica y Diastólica -->
+                <div class="space-y-1 bg-cardDark/50 p-2.5 rounded-lg border border-gray-800">
+                    <div class="flex justify-between text-xs font-medium">
+                        <span class="text-nibp font-bold">Presión Arterial (PA)</span>
+                        <span class="font-mono text-rose-300"><span id="valPAS">120</span> / <span id="valPAD">80</span> mmHg</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                            <label class="text-[10px] text-gray-400 block">Sistólica (PAS)</label>
+                            <input type="range" id="inputPAS" min="50" max="220" value="120" oninput="updateControls()" class="w-full accent-rose-500 cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-400 block">Diastólica (PAD)</label>
+                            <input type="range" id="inputPAD" min="30" max="130" value="80" oninput="updateControls()" class="w-full accent-rose-400 cursor-pointer">
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-gray-500 pt-1">
+                        <span>PAS Mín: <input type="number" id="limitPasMin" value="90" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                        <span>PAS Máx: <input type="number" id="limitPasMax" value="140" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                    </div>
+                </div>
+
+                <!-- Control FR -->
+                <div class="space-y-1 bg-cardDark/50 p-2.5 rounded-lg border border-gray-800">
+                    <div class="flex justify-between text-xs font-medium">
+                        <span class="text-resp font-bold">Frecuencia Respiratoria (FR)</span>
+                        <span class="font-mono text-yellow-300"><span id="valFR">16</span> rpm</span>
+                    </div>
+                    <input type="range" id="inputFR" min="6" max="50" value="16" oninput="updateControls()" class="w-full accent-yellow-500 cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>Límite Mín: <input type="number" id="limitFrMin" value="10" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                        <span>Límite Máx: <input type="number" id="limitFrMax" value="25" onchange="updateLimits()" class="w-12 bg-gray-900 border border-gray-700 rounded px-1 text-center text-gray-300"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: PREDEFINED SCENARIOS -->
+            <div id="tabScenarios" class="hidden bg-panelDark rounded-xl border border-gray-800 p-4 space-y-3 flex-1 overflow-y-auto">
+                <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider border-b border-gray-800 pb-2">
+                    <i class="fa-solid fa-notes-medical text-cyan-400 mr-1.5"></i> Escenarios Simulados
+                </h2>
+                <p class="text-xs text-gray-400 mb-2">Seleccione una condición clínica para cargar los parámetros en el monitor:</p>
+
+                <div class="space-y-2">
+                    <!-- Scenario 1 -->
+                    <button onclick="loadScenario('baseline')" class="w-full text-left p-3 rounded-lg bg-cardDark hover:bg-gray-800 border border-gray-700 transition group flex flex-col gap-1">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-sm text-emerald-400 group-hover:underline">1. Paciente Estable (Normal)</span>
+                            <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded">Fisiológico</span>
+                        </div>
+                        <p class="text-xs text-gray-400">FC: 75 lpm | SpO₂: 98% | PA: 120/80 mmHg | FR: 16 rpm</p>
+                    </button>
+
+                    <!-- Scenario 2 -->
+                    <button onclick="loadScenario('tachycardia')" class="w-full text-left p-3 rounded-lg bg-cardDark hover:bg-gray-800 border border-gray-700 transition group flex flex-col gap-1">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-sm text-amber-400 group-hover:underline">2. Taquicardia Sinusal / Estrés</span>
+                            <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded">Hiperdinámico</span>
+                        </div>
+                        <p class="text-xs text-gray-400">FC: 135 lpm | SpO₂: 96% | PA: 135/85 mmHg | FR: 24 rpm</p>
+                    </button>
+
+                    <!-- Scenario 3 -->
+                    <button onclick="loadScenario('bradycardia')" class="w-full text-left p-3 rounded-lg bg-cardDark hover:bg-gray-800 border border-gray-700 transition group flex flex-col gap-1">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-sm text-sky-400 group-hover:underline">3. Bradicardia Severa</span>
+                            <span class="text-[10px] bg-sky-950 text-sky-300 border border-sky-800 px-2 py-0.5 rounded">Bajo Gasto</span>
+                        </div>
+                        <p class="text-xs text-gray-400">FC: 38 lpm | SpO₂: 94% | PA: 85/50 mmHg | FR: 12 rpm</p>
+                    </button>
+
+                    <!-- Scenario 4 -->
+                    <button onclick="loadScenario('hypoxemia')" class="w-full text-left p-3 rounded-lg bg-cardDark hover:bg-gray-800 border border-gray-700 transition group flex flex-col gap-1">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-sm text-cyan-400 group-hover:underline">4. Hipoxemia Aguda</span>
+                            <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded">Insuf. Resp.</span>
+                        </div>
+                        <p class="text-xs text-gray-400">FC: 118 lpm | SpO₂: 82% | PA: 140/90 mmHg | FR: 32 rpm</p>
+                    </button>
+
+                    <!-- Scenario 5 -->
+                    <button onclick="loadScenario('shock')" class="w-full text-left p-3 rounded-lg bg-cardDark hover:bg-gray-800 border border-gray-700 transition group flex flex-col gap-1">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-sm text-rose-400 group-hover:underline">5. Shock / Hipotensión Severa</span>
+                            <span class="text-[10px] bg-rose-950 text-rose-300 border border-rose-800 px-2 py-0.5 rounded">Colapso</span>
+                        </div>
+                        <p class="text-xs text-gray-400">FC: 125 lpm | SpO₂: 89% | PA: 70/40 mmHg | FR: 28 rpm</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 3: CLINICAL EVALUATION EXERCISE -->
+            <div id="tabExercise" class="hidden bg-panelDark rounded-xl border border-gray-800 p-4 space-y-4 flex-1 overflow-y-auto">
+                <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider border-b border-gray-800 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-user-nurse text-yellow-400 mr-1.5"></i> Evaluación de Enfermería</span>
+                </h2>
+
+                <form id="formClinicalAnalysis" onsubmit="evaluateClinicalAnalysis(event)" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">1. ¿Qué observa en el monitor? (Trazados y signos)</label>
+                        <textarea id="ansObserv" rows="2" required placeholder="Ej. Taquicardia, curva de SpO2 desaturando..." class="w-full bg-black/50 border border-gray-700 rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-yellow-500"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">2. ¿Qué parámetros le preocupan y por qué?</label>
+                        <textarea id="ansConcern" rows="2" required placeholder="Ej. Caída de la SpO2 por debajo de 90%, riesgo de hipoxia tisular..." class="w-full bg-black/50 border border-gray-700 rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-yellow-500"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-300 mb-1">3. ¿Qué acciones e intervenciones debe verificar/realizar?</label>
+                        <textarea id="ansActions" rows="2" required placeholder="Ej. Posición Fowler, auscultación pulmonar, verificar sensor, oxigenoterapia..." class="w-full bg-black/50 border border-gray-700 rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-yellow-500"></textarea>
+                    </div>
+
+                    <div class="flex gap-2 pt-1">
+                        <button type="submit" class="flex-1 py-2 bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs rounded transition shadow">
+                            <i class="fa-solid fa-check-double mr-1"></i> Evaluar e Interpretar
+                        </button>
+                        <button type="button" onclick="exportReport()" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold text-xs rounded transition border border-gray-700">
+                            <i class="fa-solid fa-file-export mr-1"></i> Imprimir/PDF
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Feedback Area -->
+                <div id="feedbackBox" class="hidden p-3 rounded-lg border text-xs space-y-2">
+                    <h3 id="feedbackTitle" class="font-bold flex items-center gap-1.5 text-sm"></h3>
+                    <p id="feedbackText" class="text-gray-300 leading-relaxed"></p>
+                    <div id="feedbackTips" class="text-[11px] bg-black/40 p-2 rounded border border-gray-800 text-gray-400"></div>
+                </div>
+            </div>
+
+            <!-- TAB 4: EVENT LOG -->
+            <div id="tabLog" class="hidden bg-panelDark rounded-xl border border-gray-800 p-4 space-y-3 flex-1 flex flex-col max-h-[700px]">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                    <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider">
+                        <i class="fa-solid fa-list-check text-rose-400 mr-1.5"></i> Registro de Eventos
+                    </h2>
+                    <button onclick="clearLog()" class="text-[11px] text-gray-400 hover:text-white underline">Limpiar</button>
+                </div>
+                <div id="logContainer" class="flex-1 overflow-y-auto space-y-1.5 font-mono text-[11px] pr-1">
+                    <!-- Dynamic Log Items -->
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- PRINTABLE REPORT MODAL/CONTAINER (HIDDEN UNTIL EXPORTED) -->
+    <div id="printReportModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white text-gray-900 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="border-b border-gray-300 pb-3 flex justify-between items-start">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900">REPORTE DE EVALUACIÓN CLÍNICA EN SIMULACIÓN</h2>
+                    <p class="text-xs text-gray-600">Simulador Multiparamétrico Virtual | Prof. Vanesa Ferreyra®</p>
+                </div>
+                <button onclick="closePrintReport()" class="text-gray-500 hover:text-black font-bold text-lg">&times;</button>
+            </div>
+
+            <div id="reportContent" class="space-y-3 text-xs">
+                <!-- Filled dynamically by JavaScript -->
+            </div>
+
+            <div class="border-t border-gray-200 pt-3 flex justify-end gap-2">
+                <button onclick="closePrintReport()" class="px-4 py-1.5 border border-gray-400 rounded text-xs font-semibold text-gray-700">Cerrar</button>
+                <button onclick="window.print()" class="px-4 py-1.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700">Imprimir / Guardar como PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AUDIO SYNTHESIZER & SIMULATION ENGINE -->
+    <script>
+        /* ==========================================================================
+           GLOBAL SIMULATION STATE & PARAMETERS
+           ========================================================================== */
+        const state = {
+            fc: 75,
+            spo2: 98,
+            pas: 120,
+            pad: 80,
+            fr: 16,
+            paused: false,
+            muted: false,
+            startTime: Date.now(),
+            
+            // Alarm Limits
+            limits: {
+                fcMin: 50, fcMax: 120,
+                spo2Min: 90,
+                pasMin: 90, pasMax: 140,
+                frMin: 10, frMax: 25
+            },
+
+            // Active Alarm Status
+            activeAlarm: null, // { level: 'HIGH'|'MED', param: string, msg: string }
+            muteUntil: 0
+        };
+
+        // Event History Log
+        const eventLog = [];
+
+        /* ==========================================================================
+           AUDIO SYNTHESIZER (Web Audio API - No external files needed)
+           ========================================================================== */
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+        }
+
+        // Play short QRS Beep synced with ECG heartbeat
+        function playHeartBeep() {
+            if (state.muted || !audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                // Pitch varies according to SpO2 (Realistic Feature)
+                const baseFreq = 300 + (state.spo2 - 70) * 8; 
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(Math.max(150, Math.min(baseFreq, 800)), audioCtx.currentTime);
+
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.08);
+            } catch (e) {
+                console.error("Audio error:", e);
+            }
+        }
+
+        // Play Warning/Alarm Beep
+        function playAlarmSound(isHigh) {
+            if (state.muted || !audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = isHigh ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(isHigh ? 880 : 440, audioCtx.currentTime);
+
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            } catch (e) {}
+        }
+
+        /* ==========================================================================
+           CANVAS & WAVEFORM ENGINE (Synchronized Dynamic Waves)
+           ========================================================================== */
+        const canvases = {
+            ecg: document.getElementById('canvasECG'),
+            spo2: document.getElementById('canvasSpO2'),
+            pa: document.getElementById('canvasPA'),
+            resp: document.getElementById('canvasRESP')
+        };
+
+        const ctxs = {
+            ecg: canvases.ecg.getContext('2d'),
+            spo2: canvases.spo2.getContext('2d'),
+            pa: canvases.pa.getContext('2d'),
+            resp: canvases.resp.getContext('2d')
+        };
+
+        // Internal rendering buffers
+        const waveBuffers = {
+            ecg: [],
+            spo2: [],
+            pa: [],
+            resp: []
+        };
+
+        let animFrameId = null;
+        let lastTimestamp = 0;
+        let ecgPhase = 0;
+        let respPhase = 0;
+
+        function resizeCanvases() {
+            Object.keys(canvases).forEach(key => {
+                const canvas = canvases[key];
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                // Pre-fill buffers
+                const maxPoints = Math.floor(canvas.width);
+                waveBuffers[key] = new Array(maxPoints).fill(canvas.height / 2);
+            });
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+
+        /* Mathematical Generators for Realistic Waveforms */
+        function getECGSample(phase) {
+            // phase 0 to 1
+            const p = phase % 1.0;
+            // Baseline noise
+            let y = (Math.random() - 0.5) * 0.03; 
+
+            if (p > 0.1 && p < 0.18) {
+                // P Wave
+                y += Math.sin((p - 0.1) / 0.08 * Math.PI) * 0.15;
+            } else if (p >= 0.22 && p < 0.24) {
+                // Q wave
+                y -= 0.15;
+            } else if (p >= 0.24 && p < 0.28) {
+                // R wave (Sharp peak)
+                y += Math.sin((p - 0.24) / 0.04 * Math.PI) * 1.0;
+            } else if (p >= 0.28 && p < 0.31) {
+                // S wave
+                y -= 0.35;
+            } else if (p > 0.42 && p < 0.58) {
+                // T Wave
+                y += Math.sin((p - 0.42) / 0.16 * Math.PI) * 0.25;
+            }
+            return y;
+        }
+
+        function getSpO2Sample(phase) {
+            const p = phase % 1.0;
+            let y = 0;
+            if (p < 0.3) {
+                // Systolic rise and peak
+                y = Math.sin(p / 0.3 * Math.PI);
+            } else if (p >= 0.3 && p < 0.42) {
+                // Dicrotic notch
+                y = 0.5 + Math.sin((p - 0.3) / 0.12 * Math.PI) * 0.15;
+            } else if (p >= 0.42 && p < 0.8) {
+                // Diastolic decay
+                y = 0.5 * Math.exp(-(p - 0.42) * 4);
+            }
+            return y;
+        }
+
+        function getPASample(phase) {
+            const p = phase % 1.0;
+            let y = 0;
+            if (p < 0.25) {
+                // Sharp pressure rise
+                y = Math.sin(p / 0.25 * (Math.PI / 2));
+            } else if (p >= 0.25 && p < 0.35) {
+                // Notch
+                y = 1.0 - (p - 0.25) * 2;
+            } else if (p >= 0.35 && p < 0.85) {
+                // Decay
+                y = 0.8 * Math.exp(-(p - 0.35) * 3);
+            }
+            return y;
+        }
+
+        function getRESPSample(phase) {
+            const p = phase % 1.0;
+            // Smooth sinusoidal respiration
+            return (Math.sin(p * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+        }
+
+        /* Render Animation Loop */
+        let lastBeatTime = 0;
+
+        function animate(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const delta = (timestamp - lastTimestamp) / 1000; // seconds
+            lastTimestamp = timestamp;
+
+            if (!state.paused) {
+                // Advance phases based on set rates (FC lpm & FR rpm)
+                const fcFreq = state.fc / 60; // Beats per second
+                const prevEcgPhase = ecgPhase;
+                ecgPhase += fcFreq * delta;
+
+                // Detect heartbeat trigger (QRS Peak at phase 0.26)
+                if (Math.floor(prevEcgPhase - 0.26) < Math.floor(ecgPhase - 0.26)) {
+                    playHeartBeep();
+                }
+
+                const frFreq = state.fr / 60; // Respiration cycles per second
+                respPhase += frFreq * delta;
+
+                // Shift buffers left and push new calculated points
+                Object.keys(waveBuffers).forEach(key => {
+                    waveBuffers[key].shift();
+                });
+
+                // Compute latest Y positions
+                const ecgVal = getECGSample(ecgPhase);
+                const spo2Val = getSpO2Sample(ecgPhase - 0.08); // Slight delay relative to ECG
+                const paVal = getPASample(ecgPhase - 0.05);
+                const respVal = getRESPSample(respPhase);
+
+                // Scale to Canvas Heights
+                const hEcg = canvases.ecg.height;
+                waveBuffers.ecg.push(hEcg / 2 - ecgVal * (hEcg * 0.38));
+
+                const hSpo2 = canvases.spo2.height;
+                waveBuffers.spo2.push(hSpo2 - 8 - spo2Val * (hSpo2 * 0.75));
+
+                const hPa = canvases.pa.height;
+                // Scale PA curve height proportional to pulse pressure (PAS - PAD)
+                const paAmplitude = Math.min(1.2, (state.pas - state.pad) / 60);
+                waveBuffers.pa.push(hPa - 6 - paVal * (hPa * 0.7 * paAmplitude));
+
+                const hResp = canvases.resp.height;
+                waveBuffers.resp.push(hResp - 8 - respVal * (hResp * 0.7));
+            }
+
+            // Draw Canvases
+            drawWave('ecg', '#00FF66');
+            drawWave('spo2', '#00E5FF');
+            drawWave('pa', '#FF3366');
+            drawWave('resp', '#FFE600');
+
+            // Alarm & Logic Verification
+            checkAlarms();
+
+            animFrameId = requestAnimationFrame(animate);
+        }
+
+        function drawWave(key, color) {
+            const canvas = canvases[key];
+            const ctx = ctxs[key];
+            const buffer = waveBuffers[key];
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (buffer.length < 2) return;
+
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+
+            const step = canvas.width / (buffer.length - 1);
+            ctx.moveTo(0, buffer[0]);
+
+            for (let i = 1; i < buffer.length; i++) {
+                ctx.lineTo(i * step, buffer[i]);
+            }
+            ctx.stroke();
+
+            // Glow Effect
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 6;
+        }
+
+        /* ==========================================================================
+           CONTROLS, UI UPDATES & LOGIC
+           ========================================================================== */
+        function updateControls() {
+            initAudio(); // Audio context resume on interaction
+            
+            state.fc = parseInt(document.getElementById('inputFC').value);
+            state.spo2 = parseInt(document.getElementById('inputSpO2').value);
+            state.pas = parseInt(document.getElementById('inputPAS').value);
+            state.pad = parseInt(document.getElementById('inputPAD').value);
+            state.fr = parseInt(document.getElementById('inputFR').value);
+
+            // Ensure PAS > PAD
+            if (state.pad >= state.pas) {
+                state.pad = state.pas - 10;
+                document.getElementById('inputPAD').value = state.pad;
+            }
+
+            updateDisplays();
+        }
+
+        function updateDisplays() {
+            // Update Slider Text Labels
+            document.getElementById('valFC').innerText = state.fc;
+            document.getElementById('valSpO2').innerText = state.spo2;
+            document.getElementById('valPAS').innerText = state.pas;
+            document.getElementById('valPAD').innerText = state.pad;
+            document.getElementById('valFR').innerText = state.fr;
+
+            // Update Monitor Numbers
+            document.getElementById('displayFC').innerText = state.fc;
+            document.getElementById('displaySpO2').innerText = state.spo2;
+            document.getElementById('displayPA').innerText = `${state.pas}/${state.pad}`;
+
+            // Calculate PAM (Mean Arterial Pressure) = (PAS + 2*PAD)/3
+            const pam = Math.round((state.pas + 2 * state.pad) / 3);
+            document.getElementById('displayPAM').innerText = pam;
+
+            document.getElementById('displayFR').innerText = state.fr;
+        }
+
+        function updateLimits() {
+            state.limits.fcMin = parseInt(document.getElementById('limitFcMin').value) || 30;
+            state.limits.fcMax = parseInt(document.getElementById('limitFcMax').value) || 200;
+            state.limits.spo2Min = parseInt(document.getElementById('limitSpo2Min').value) || 50;
+            state.limits.pasMin = parseInt(document.getElementById('limitPasMin').value) || 50;
+            state.limits.pasMax = parseInt(document.getElementById('limitPasMax').value) || 220;
+            state.limits.frMin = parseInt(document.getElementById('limitFrMin').value) || 6;
+            state.limits.frMax = parseInt(document.getElementById('limitFrMax').value) || 50;
+
+            addLogEntry("Límites de alarma actualizados por el usuario.", "info");
+        }
+
+        /* Alarm Monitoring Engine */
+        let lastAlarmBeep = 0;
+
+        function checkAlarms() {
+            let active = null;
+
+            // Priority 1: High Critical Alarms
+            if (state.fc < 40 || state.fc > 140) {
+                active = { level: 'HIGH', param: 'FC', msg: `CRÍTICO: FC extrema (${state.fc} lpm)` };
+            } else if (state.spo2 < 88) {
+                active = { level: 'HIGH', param: 'SpO2', msg: `CRÍTICO: Desaturación severa (${state.spo2}%)` };
+            } else if (state.pas < 85) {
+                active = { level: 'HIGH', param: 'PA', msg: `CRÍTICO: Hipotensión arterial (${state.pas} mmHg)` };
+            } 
+            // Priority 2: Medium Alarms
+            else if (state.fc < state.limits.fcMin || state.fc > state.limits.fcMax) {
+                active = { level: 'MED', param: 'FC', msg: `Alarma FC fuera de rango (${state.fc} lpm)` };
+            } else if (state.spo2 < state.limits.spo2Min) {
+                active = { level: 'MED', param: 'SpO2', msg: `Alarma SpO2 baja (${state.spo2}%)` };
+            } else if (state.pas < state.limits.pasMin || state.pas > state.limits.pasMax) {
+                active = { level: 'MED', param: 'PA', msg: `Alarma PAS fuera de rango (${state.pas} mmHg)` };
+            } else if (state.fr < state.limits.frMin || state.fr > state.limits.frMax) {
+                active = { level: 'MED', param: 'FR', msg: `Alarma FR fuera de rango (${state.fr} rpm)` };
+            }
+
+            const banner = document.getElementById('alarmBanner');
+            const bannerText = document.getElementById('alarmBannerText');
+            const bannerSub = document.getElementById('alarmBannerSub');
+
+            if (active) {
+                // Check if new alarm state
+                if (!state.activeAlarm || state.activeAlarm.msg !== active.msg) {
+                    addLogEntry(`ALARMA DISPARADA: ${active.msg}`, active.level === 'HIGH' ? 'danger' : 'warning');
+                }
+                state.activeAlarm = active;
+
+                banner.classList.remove('hidden', 'alarm-high', 'alarm-med');
+                if (active.level === 'HIGH') {
+                    banner.classList.add('alarm-high', 'bg-rose-950', 'text-rose-200', 'border', 'border-rose-500');
+                    bannerText.innerText = `🚨 ALARMA ALTA PRIORIDAD: ${active.param}`;
+                } else {
+                    banner.classList.add('alarm-med', 'bg-yellow-950', 'text-yellow-200', 'border', 'border-yellow-500');
+                    bannerText.innerText = `⚠️ ALERTA: ${active.param}`;
+                }
+                bannerSub.innerText = active.msg;
+
+                // Sound Alarm periodically
+                const now = Date.now();
+                if (now > state.muteUntil && now - lastAlarmBeep > (active.level === 'HIGH' ? 800 : 1600)) {
+                    playAlarmSound(active.level === 'HIGH');
+                    lastAlarmBeep = now;
+                }
+            } else {
+                if (state.activeAlarm) {
+                    addLogEntry("Parámetros normalizados. Alarma resuelta.", "success");
+                }
+                state.activeAlarm = null;
+                banner.classList.add('hidden');
+            }
+        }
+
+        /* Toggle Pause Waveforms */
+        function togglePause() {
+            state.paused = !state.paused;
+            const btnIcon = document.getElementById('pauseIcon');
+            const btnText = document.getElementById('pauseText');
+
+            if (state.paused) {
+                btnIcon.className = "fa-solid fa-play text-emerald-400";
+                btnText.innerText = "Reanudar";
+                addLogEntry("Trazados en pausa.", "info");
+            } else {
+                btnIcon.className = "fa-solid fa-pause text-amber-400";
+                btnText.innerText = "Pausar";
+                addLogEntry("Trazados reanudados.", "info");
+            }
+        }
+
+        /* Mute / Unmute Audio */
+        function toggleMute() {
+            initAudio();
+            state.muted = !state.muted;
+            const muteIcon = document.getElementById('muteIcon');
+            const muteText = document.getElementById('muteText');
+
+            if (state.muted) {
+                muteIcon.className = "fa-solid fa-volume-xmark text-rose-400";
+                muteText.innerText = "Silenciado";
+                addLogEntry("Audio global silenciado.", "warning");
+            } else {
+                muteIcon.className = "fa-solid fa-volume-high text-emerald-400";
+                muteText.innerText = "Audio Activo";
+                addLogEntry("Audio habilitado.", "info");
+            }
+        }
+
+        /* Reset to Normal Baseline */
+        function resetToBaseline() {
+            loadScenario('baseline');
+            addLogEntry("Monitor restablecido a valores normales.", "info");
+        }
+
+        /* Load Predefined Clinical Scenarios */
+        function loadScenario(type) {
+            initAudio();
+            switch (type) {
+                case 'baseline':
+                    state.fc = 75; state.spo2 = 98; state.pas = 120; state.pad = 80; state.fr = 16;
+                    addLogEntry("Cargado Escenario: Paciente Estable (Normal)", "info");
+                    break;
+                case 'tachycardia':
+                    state.fc = 135; state.spo2 = 96; state.pas = 135; state.pad = 85; state.fr = 24;
+                    addLogEntry("Cargado Escenario: Taquicardia Sinusal / Estrés", "warning");
+                    break;
+                case 'bradycardia':
+                    state.fc = 38; state.spo2 = 94; state.pas = 85; state.pad = 50; state.fr = 12;
+                    addLogEntry("Cargado Escenario: Bradicardia Severa", "danger");
+                    break;
+                case 'hypoxemia':
+                    state.fc = 118; state.spo2 = 82; state.pas = 140; state.pad = 90; state.fr = 32;
+                    addLogEntry("Cargado Escenario: Hipoxemia Aguda", "danger");
+                    break;
+                case 'shock':
+                    state.fc = 125; state.spo2 = 89; state.pas = 70; state.pad = 40; state.fr = 28;
+                    addLogEntry("Cargado Escenario: Shock / Hipotensión Severa", "danger");
+                    break;
+            }
+
+            // Sync Inputs
+            document.getElementById('inputFC').value = state.fc;
+            document.getElementById('inputSpO2').value = state.spo2;
+            document.getElementById('inputPAS').value = state.pas;
+            document.getElementById('inputPAD').value = state.pad;
+            document.getElementById('inputFR').value = state.fr;
+
+            updateDisplays();
+        }
+
+        /* UI Tab Switcher */
+        function switchTab(tabId) {
+            const tabs = ['tabControls', 'tabScenarios', 'tabExercise', 'tabLog'];
+            tabs.forEach(id => {
+                const el = document.getElementById(id);
+                const btn = document.getElementById('btn' + id.charAt(0).toUpperCase() + id.slice(1));
+                if (id === tabId) {
+                    el.classList.remove('hidden');
+                    btn.classList.add('bg-gray-800', 'text-white', 'shadow');
+                    btn.classList.remove('text-gray-400');
+                } else {
+                    el.classList.add('hidden');
+                    btn.classList.remove('bg-gray-800', 'text-white', 'shadow');
+                    btn.classList.add('text-gray-400');
+                }
+            });
+        }
+
+        /* ==========================================================================
+           LOGGING & CLINICAL EVALUATION EXPORT
+           ========================================================================== */
+        function addLogEntry(msg, type = 'info') {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            
+            let colorClass = 'text-gray-300';
+            if (type === 'danger') colorClass = 'text-rose-400 font-bold';
+            if (type === 'warning') colorClass = 'text-yellow-400';
+            if (type === 'success') colorClass = 'text-emerald-400';
+
+            eventLog.unshift({ time: timeStr, msg, colorClass });
+
+            const container = document.getElementById('logContainer');
+            container.innerHTML = eventLog.map(e => `
+                <div class="border-b border-gray-800/60 pb-1">
+                    <span class="text-gray-500 font-mono">[${e.time}]</span> 
+                    <span class="${e.colorClass}">${e.msg}</span>
+                </div>
+            `).join('');
+        }
+
+        function clearLog() {
+            eventLog.length = 0;
+            document.getElementById('logContainer').innerHTML = '<span class="text-gray-600 italic">Sin eventos registrados</span>';
+        }
+
+        /* Interactive Clinical Evaluation Logic */
+        function evaluateClinicalAnalysis(e) {
+            e.preventDefault();
+            const obs = document.getElementById('ansObserv').value.trim();
+            const concern = document.getElementById('ansConcern').value.trim();
+            const actions = document.getElementById('ansActions').value.trim();
+
+            const feedbackBox = document.getElementById('feedbackBox');
+            const feedbackTitle = document.getElementById('feedbackTitle');
+            const feedbackText = document.getElementById('feedbackText');
+            const feedbackTips = document.getElementById('feedbackTips');
+
+            feedbackBox.classList.remove('hidden', 'bg-emerald-950/40', 'border-emerald-800', 'bg-amber-950/40', 'border-amber-800');
+
+            // Automated pedagogical comparison
+            let tips = [];
+            const isHypoxic = state.spo2 < 90;
+            const isTachycardic = state.fc > 100;
+            const isHypotensive = state.pas < 90;
+
+            if (isHypoxic) tips.push("• <strong>Hipoxemia:</strong> Recuerde verificar permeabilidad de vía aérea, colocar posición Fowler y preparar oxigenoterapia.");
+            if (isTachycardic) tips.push("• <strong>Taquicardia:</strong> Evalúe dolor, ansiedad, fiebre, volemia o necesidad de ECG de 12 derivaciones.");
+            if (isHypotensive) tips.push("• <strong>Hipotensión:</strong> Coloque en Trendelenburg si no hay contraindicación, verifique perfusión periférica y accesos venosos.");
+            if (tips.length === 0) tips.push("• <strong>Estabilidad:</strong> Parámetros dentro de límites normofisiológicos. Mantenga vigilancia continua.");
+
+            feedbackTitle.innerHTML = `<i class="fa-solid fa-graduation-cap text-yellow-400"></i> Retroalimentación Docente Inmediata`;
+            feedbackTitle.className = "font-bold text-yellow-400 flex items-center gap-2";
+            
+            feedbackText.innerText = `Análisis recibido correctamente. Ha jerarquizado los datos actuales (FC: ${state.fc}, SpO2: ${state.spo2}%, PA: ${state.pas}/${state.pad}). Compare sus respuestas con las recomendaciones metodológicas a continuación:`;
+
+            feedbackTips.innerHTML = tips.join('<br>');
+            feedbackBox.classList.add('bg-gray-900', 'border-gray-700');
+
+            addLogEntry("Ejercicio de análisis clínico completado y evaluado.", "success");
+        }
+
+        /* Export Printable Report Modal */
+        function exportReport() {
+            const obs = document.getElementById('ansObserv').value || "No completado";
+            const concern = document.getElementById('ansConcern').value || "No completado";
+            const actions = document.getElementById('ansActions').value || "No completado";
+            const pam = Math.round((state.pas + 2 * state.pad) / 3);
+
+            const reportHtml = `
+                <div class="bg-gray-100 p-3 rounded border text-gray-800 space-y-1">
+                    <p><strong>Fecha/Hora:</strong> ${new Date().toLocaleString()}</p>
+                    <p><strong>Estado Actual del Monitor:</strong></p>
+                    <ul class="list-disc list-inside font-mono text-xs text-gray-700 pl-2">
+                        <li>Frecuencia Cardíaca (FC): ${state.fc} lpm</li>
+                        <li>Saturación de Oxígeno (SpO₂): ${state.spo2}%</li>
+                        <li>Presión Arterial (PA): ${state.pas}/${state.pad} mmHg (PAM: ${pam} mmHg)</li>
+                        <li>Frecuencia Respiratoria (FR): ${state.fr} rpm</li>
+                    </ul>
+                </div>
+
+                <div class="space-y-2">
+                    <h4 class="font-bold border-b pb-1 text-gray-900">Respuestas del Estudiante:</h4>
+                    <div>
+                        <strong class="text-gray-700">1. Observación de Trazados y Valores:</strong>
+                        <p class="bg-gray-50 p-2 rounded border border-gray-200 mt-1">${obs}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700">2. Parámetros Críticos y Justificación:</strong>
+                        <p class="bg-gray-50 p-2 rounded border border-gray-200 mt-1">${concern}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700">3. Intervenciones de Enfermería Planificadas:</strong>
+                        <p class="bg-gray-50 p-2 rounded border border-gray-200 mt-1">${actions}</p>
+                    </div>
+                </div>
+
+                <div class="border-t pt-2 text-[10px] text-gray-500 italic">
+                    Recurso Didáctico de Simulación Clínica | Cátedra de Enfermería en Cuidados Críticos | Prof. Vanesa Ferreyra®
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = reportHtml;
+            document.getElementById('printReportModal').classList.remove('hidden');
+        }
+
+        function closePrintReport() {
+            document.getElementById('printReportModal').classList.add('hidden');
+        }
+
+        /* Simulated Clock Timer */
+        function updateSimTime() {
+            const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+            const hrs = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+            const secs = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('simTime').innerText = `${hrs}:${mins}:${secs}`;
+        }
+
+        /* ==========================================================================
+           INITIALIZATION ON PAGE LOAD
+           ========================================================================== */
+        window.onload = function() {
+            resizeCanvases();
+            updateDisplays();
+            setInterval(updateSimTime, 1000);
+            addLogEntry("Simulador Multiparamétrico iniciado. Estado fisiológico normal.", "success");
+            
+            // Start render loop
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
